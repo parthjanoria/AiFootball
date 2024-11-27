@@ -5,6 +5,40 @@ const askButton = document.getElementById("ask");
 const responseDiv = document.getElementById("response");
 
 document.addEventListener("DOMContentLoaded", () => {
+  async function askQuestionChatGPT(question) {
+    const apiUrl = "https://chatgpt-42.p.rapidapi.com/conversationgpt4-2";
+    const myHeaders = new Headers();
+    myHeaders.append("Content-Type", "application/json");
+    myHeaders.append("x-rapidapi-host", "chatgpt-42.p.rapidapi.com");
+    myHeaders.append("x-rapidapi-key", "41fe1a0e90mshaefef9b03b47fafp12947ajsn1b2d644a0f36");
+    const raw = JSON.stringify({
+      "messages": [
+        {
+          "role": "user",
+          "content": question
+        }
+      ],
+      "system_prompt": "",
+      "temperature": 0.9,
+      "top_k": 5,
+      "top_p": 0.9,
+      "max_tokens": 256,
+      "web_access": false
+    });
+    const requestOptions = {
+      method: "POST",
+      headers: myHeaders,
+      body: raw,
+      redirect: "follow"
+    };
+    const response = await fetch(apiUrl, requestOptions);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const result = await response.json();
+    return result.result;
+  }
+
     const handleAsk = async () => {
         const question = questionInput.value;
         questionInput.innerHTML = " "
@@ -12,47 +46,52 @@ document.addEventListener("DOMContentLoaded", () => {
             askButton.innerHTML = '<img id="loading-img" src="assets/images/loading2.svg" width="110" height="20" alt="Loading" />';
             setResponse('Please wait! Response is coming....')
             setIsLoading(true)
-            try {
-                const url = 'https://open-ai21.p.rapidapi.com/conversationgpt';
-                const options = {
-                    method: 'POST',
-                    headers: {
-                        'content-type': 'application/json',
-                        'X-RapidAPI-Key': '12865b262bmsh1df342a7a8209adp11946djsned15b0207e45',
-                        'X-RapidAPI-Host': 'open-ai21.p.rapidapi.com'
-                    },
-                    body: JSON.stringify({
-                        messages: [
-                            {
-                                role: 'user',
-                                content: question
-                            }
-                        ]
-                    })
-                };
-                axios
-                    .request({
-                        url,
-                        method: options.method,
-                        headers: options.headers,
-                        data: options.body
-                    })
-                    .then((response) => {
-                        const regex = /\\n/g;
-                        const ans = response.data.GPT.replace(regex, '<br>');
-                        setResponse(ans);
-                        setIsLoading(false)
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                        setIsLoading(false)
-                        setResponse('Something went wrong. Please try again')
-                    });
-            } catch (error) {
-                console.error(error);
-                setIsLoading(false)
-                setResponse('Something went wrong. Please try again')
-            }
+
+            const result = await askQuestionChatGPT(question);
+            setResponse(result);
+            setIsLoading(false)
+
+            // try {
+            //     const url = 'https://open-ai21.p.rapidapi.com/conversationgpt';
+            //     const options = {
+            //         method: 'POST',
+            //         headers: {
+            //             'content-type': 'application/json',
+            //             'X-RapidAPI-Key': '12865b262bmsh1df342a7a8209adp11946djsned15b0207e45',
+            //             'X-RapidAPI-Host': 'open-ai21.p.rapidapi.com'
+            //         },
+            //         body: JSON.stringify({
+            //             messages: [
+            //                 {
+            //                     role: 'user',
+            //                     content: question
+            //                 }
+            //             ]
+            //         })
+            //     };
+            //     axios
+            //         .request({
+            //             url,
+            //             method: options.method,
+            //             headers: options.headers,
+            //             data: options.body
+            //         })
+            //         .then((response) => {
+            //             const regex = /\\n/g;
+            //             const ans = response.data.GPT.replace(regex, '<br>');
+            //             setResponse(ans);
+            //             setIsLoading(false)
+            //         })
+            //         .catch((error) => {
+            //             console.error(error);
+            //             setIsLoading(false)
+            //             setResponse('Something went wrong. Please try again')
+            //         });
+            // } catch (error) {
+            //     console.error(error);
+            //     setIsLoading(false)
+            //     setResponse('Something went wrong. Please try again')
+            // }
         }
     };
 
