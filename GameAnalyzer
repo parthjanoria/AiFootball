@@ -1,0 +1,151 @@
+// JavaScript Implementation of Football AI Coach with Enhanced Features
+const express = require('express');
+const { Storage } = require('@google-cloud/storage');
+const openai = require('openai');
+const cv = require('opencv4nodejs');
+const fs = require('fs');
+
+const app = express();
+app.use(express.json());
+
+// Google Cloud Storage Configuration
+const storage = new Storage({ keyFilename: 'path-to-service-account-key.json' });
+const bucketName = 'your-bucket-name';
+
+// OpenAI API Configuration
+openai.apiKey = 'your-openai-api-key';
+
+// Function to Upload Video to Google Cloud
+async function uploadToGCloud(filePath) {
+    const fileName = filePath.split('/').pop();
+    await storage.bucket(bucketName).upload(filePath, {
+        destination: fileName,
+    });
+    console.log(`Uploaded ${fileName} to Google Cloud.`);
+}
+
+// Function to Capture and Save Video
+async function captureVideo(outputFile = 'game_footage.mp4') {
+    const cap = new cv.VideoCapture(0);
+    const frameWidth = cap.get(cv.CAP_PROP_FRAME_WIDTH);
+    const frameHeight = cap.get(cv.CAP_PROP_FRAME_HEIGHT);
+    const writer = new cv.VideoWriter(outputFile, cv.VideoWriter.fourcc('M', 'J', 'P', 'G'), 20, new cv.Size(frameWidth, frameHeight));
+
+    console.log('Press Q to stop recording.');
+    while (true) {
+        const frame = cap.read();
+        if (frame.empty) break;
+        writer.write(frame);
+        cv.imshow('Recording...', frame);
+        const key = cv.waitKey(1);
+        if (key === 81 || key === 113) break; // Q key
+    }
+    writer.release();
+    cap.release();
+    cv.destroyAllWindows();
+
+    await uploadToGCloud(outputFile);
+}
+
+// Function to Detect Players in Video
+function detectPlayers(videoPath) {
+    const net = cv.readNetFromDarknet('yolov4.cfg', 'yolov4.weights');
+    const layerNames = net.getUnconnectedOutLayersNames();
+    const cap = new cv.VideoCapture(videoPath);
+
+    while (true) {
+        const frame = cap.read();
+        if (frame.empty) break;
+
+        const blob = cv.blobFromImage(frame, 1 / 255.0, new cv.Size(416, 416), new cv.Vec3(0, 0, 0), true, false);
+        net.setInput(blob);
+        const detections = net.forward(layerNames);
+
+        detections.forEach(detection => {
+            const scores = detection.slice(5);
+            const classId = scores.indexOf(Math.max(...scores));
+            const confidence = scores[classId];
+            if (confidence > 0.5) {
+                const [centerX, centerY, width, height] = detection.slice(0, 4);
+                const x = Math.round(centerX - width / 2);
+                const y = Math.round(centerY - height / 2);
+                frame.drawRectangle(new cv.Point(x, y), new cv.Point(x + width, y + height), new cv.Vec(0, 255, 0), 2);
+            }
+        });
+
+        cv.imshow('Player Detection', frame);
+        const key = cv.waitKey(1);
+        if (key === 81 || key === 113) break; // Q key
+    }
+    cap.release();
+    cv.destroyAllWindows();
+}
+
+// Function to Calculate Player Speed
+function calculateSpeed(previousPosition, currentPosition, frameRate) {
+    const distance = Math.sqrt(
+        Math.pow(currentPosition.x - previousPosition.x, 2) +
+        Math.pow(currentPosition.y - previousPosition.y, 2)
+    );
+    return distance * frameRate; // Adjust based on real-world calibration
+}
+
+// Function to Simulate Performance Analysis
+function analyzePerformance(data) {
+    return {
+        distanceCovered: 8.5,
+        passesCompleted: 42,
+        tacklesMade: 5,
+        speed: 28.3,
+    };
+}
+
+// Function to Generate Insights Using OpenAI GPT
+async function generateInsights(metrics) {
+    const prompt = `The player covered ${metrics.distanceCovered} km, completed ${metrics.passesCompleted} passes, made ${metrics.tacklesMade} tackles, and reached a top speed of ${metrics.speed} km/h. Generate a performance summary.`;
+
+    const response = await openai.Completion.create({
+        engine: 'text-davinci-003',
+        prompt,
+        max_tokens: 100,
+    });
+    return response.choices[0].text.trim();
+}
+
+// Function to Annotate Video with Insights
+function annotateVideo(inputVideo, annotations, outputVideo) {
+    const cap = new cv.VideoCapture(inputVideo);
+    const fourcc = cv.VideoWriter.fourcc('XVID');
+    const out = new cv.VideoWriter(outputVideo, fourcc, 20.0, new cv.Size(cap.get(cv.CAP_PROP_FRAME_WIDTH), cap.get(cv.CAP_PROP_FRAME_HEIGHT)));
+
+    while (true) {
+        const frame = cap.read();
+        if (frame.empty) break;
+
+        annotations.forEach(annotation => {
+            cv.putText(
+                frame,
+                annotation.text,
+                new cv.Point(annotation.x, annotation.y),
+                cv.FONT_HERSHEY_SIMPLEX,
+                1,
+                new cv.Vec(0, 255, 0),
+                2
+            );
+        });
+
+        out.write(frame);
+    }
+
+    cap.release();
+    out.release();
+}
+
+// Endpoint to Generate Insights
+app.post('/generate_insights', async (req, res) => {
+    const metrics = req.body.metrics;
+    const insights = await generateInsights(metrics);
+    res.json({ insights });
+});
+
+app.listen(3000, () => console.log('Server running on port 3000.'));
